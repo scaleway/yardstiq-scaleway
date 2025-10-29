@@ -1,7 +1,12 @@
 from typing import Any, Dict, List
 
-from yardstiq.core import provider, Provider, Backend
-from yardstiq.objects import BackendRunResult, ComputationModel
+from yardstiq.core import (
+    provider,
+    Provider,
+    Backend,
+    BackendRunResult,
+    ComputationalModel,
+)
 
 from scaleway_qaas_client.v1alpha1 import QaaSClient, QaaSPlatform
 
@@ -12,7 +17,7 @@ class ScalewayBackend(Backend):
 
         self.platform = platform
 
-    def run(model: ComputationModel) -> BackendRunResult:
+    def run(model: ComputationalModel) -> BackendRunResult:
         pass
 
 
