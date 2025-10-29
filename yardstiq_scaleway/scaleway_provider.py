@@ -5,20 +5,60 @@ from yardstiq.core import (
     Provider,
     Backend,
     BackendRunResult,
+    BackendAvailability,
     ComputationalModel,
 )
 
-from scaleway_qaas_client.v1alpha1 import QaaSClient, QaaSPlatform
+from scaleway_qaas_client.v1alpha1 import (
+    QaaSClient,
+    QaaSPlatform,
+    QaaSPlatformAvailability,
+    QaaS,
+)
 
 
 class ScalewayBackend(Backend):
-    def __init__(self, platform: QaaSPlatform, provider: "ScalewayProvider"):
-        super().__init__(provider=provider)
+    def __init__(
+        self, provider: "ScalewayProvider", platform: QaaSPlatform, client: QaaSClient
+    ):
+        super().__init__(provider=provider, name=platform.name)
 
-        self.platform = platform
+        self.__platform: QaaSPlatform = platform
+        self.__client: QaaSClient = client
+        self.__session_id: str = None
 
-    def run(model: ComputationalModel) -> BackendRunResult:
-        pass
+    def allocate(self, **kwargs) -> None:
+        deduplication_id = kwargs.get("deduplication_id", None)
+        session = self.__client.create_session(
+            self.__platform.id, deduplication_id=deduplication_id
+        )
+        self.__session_id = session.id
+
+    def deallocate(self, **kwargs) -> None:
+        self.__client.terminate_session(self.__session_id)
+
+    def run(self, model: ComputationalModel, **kwargs) -> BackendRunResult:
+        model = self.__client.create_model(model)
+        self.__client.create_job(self.__session_id, model_id=model.id)
+
+    @property
+    def max_qubit_count(self) -> int:
+        return self.__platform.max_qubit_count
+
+    @property
+    def max_shots_per_run(self) -> int:
+        return self.__platform.max_shot_count
+
+    @property
+    def availability(self) -> BackendAvailability:
+        availability_map = {
+            QaaSPlatformAvailability.AVAILABLE: BackendAvailability.AVAILABLE,
+            QaaSPlatformAvailability.SHORTAGE: BackendAvailability.MAINTENANCE,
+            QaaSPlatformAvailability.MAINTENANCE: BackendAvailability.MAINTENANCE,
+        }
+        return availability_map.get(
+            self.__platform.availability, BackendAvailability.UNKOWN_AVAILABILITY
+        )
 
 
 @provider("scaleway")
