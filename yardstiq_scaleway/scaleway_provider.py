@@ -13,7 +13,10 @@ from scaleway_qaas_client.v1alpha1 import (
     QaaSClient,
     QaaSPlatform,
     QaaSPlatformAvailability,
-    QaaS,
+    QaaSJobBackendData,
+    QaaSJobRunData,
+    QaaSJobData,
+    QaaSCircuitData
 )
 
 
@@ -28,6 +31,9 @@ class ScalewayBackend(Backend):
         self.__session_id: str = None
 
     def allocate(self, **kwargs) -> None:
+        if self.__session_id:
+            return
+
         deduplication_id = kwargs.get("deduplication_id", None)
         session = self.__client.create_session(
             self.__platform.id, deduplication_id=deduplication_id
@@ -35,11 +41,46 @@ class ScalewayBackend(Backend):
         self.__session_id = session.id
 
     def deallocate(self, **kwargs) -> None:
+        if self.__session_id:
+            return
+
         self.__client.terminate_session(self.__session_id)
 
-    def run(self, model: ComputationalModel, **kwargs) -> BackendRunResult:
+    def run(self, model: ComputationalModel, shots : int, **kwargs) -> BackendRunResult:
+        run_data = QaaSJobRunData(
+            options={
+                "shots": shots,
+            },
+            circuits=list(
+                map(
+                    lambda c: QaaSCircuitData(
+                        serialization_format=model.serialization_format,
+                        circuit_serialization=model.serialization,
+                    ),
+                    self._circuits,
+                )
+            ),
+        )
+
+        backend_data = QaaSJobBackendData(
+            name=self.backend().name,
+            version=self.backend().version,
+        )
+
+        data = QaaSJobData.schema().dumps(
+            QaaSJobData(
+                backend=backend_data,
+                run=run_data,
+                client=None,
+            )
+        )
+
         model = self.__client.create_model(model)
-        self.__client.create_job(self.__session_id, model_id=model.id)
+
+        if not model:
+            raise RuntimeError("Failed to push circuit data")
+
+        job = self.__client.create_job(self.__session_id, model_id=model.id)
 
     @property
     def max_qubit_count(self) -> int:
