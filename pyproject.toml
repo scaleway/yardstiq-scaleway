@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yardstiq-scaleway"
+version = "0.1.0"
+description = "Yardstiq QPU provider for Scaleway QaaS"
+requires-python = ">=3.12"
+
+# Dépendances du plugin
+dependencies = [
+    "yardstiq>=0.1.0",
+    "scaleway-qaas-client>=0.1.23"
+]
+
+[project.entry-points."yardstiq.plugins"]
+scaleway = "yardstiq_scaleway.plugin_loader"
