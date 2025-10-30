@@ -11,8 +11,11 @@ requires-python = ">=3.12"
 dependencies = [
     "yardstiq>=0.1.0",
     "scaleway-qaas-client>=0.1.23",
-    "qami,"
+    "qami>=0.1.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/scaleway/yardstiq-scaleway"
 
 [project.entry-points."yardstiq.plugins"]
 scaleway = "yardstiq_scaleway.plugin_loader"

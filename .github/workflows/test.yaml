@@ -18,19 +18,19 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build twine wheel scmver setuptools
+        pip install build twine wheel scmver setuptools setuptools-scm
 
     - name: Get version from setup.py
       id: version
       run: |
-        version=$(python3 setup.py --version)
+        version=$(python -m setuptools_scm)
         echo "version=$version" >> $GITHUB_ENV
 
     - name: Build package
-      run: python setup.py sdist bdist_wheel
+      run: python -m build
 
     - name: Install package
-      run: pip install dist/pulser_scaleway-${version}-py3-none-any.whl
+      run: pip install dist/yardstiq_scaleway-${version}-py3-none-any.whl
 
     - name: Install test
       run: pip install -r tests/requirements.txt

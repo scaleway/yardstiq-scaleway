@@ -3,7 +3,7 @@ import time
 
 from typing import List, Union
 
-from qami import (
+from qio.core import (
     QuantumProgram,
     QuantumProgramResult,
     QuantumComputationModel,
@@ -54,50 +54,49 @@ class ScalewayBackend(Backend):
             return
 
         self.__client.terminate_session(self.__session_id)
+        self.__session_id = None
 
     def run(
         self,
         program: Union[QuantumProgram, List[QuantumProgram]],
         shots: int,
-        wait: bool,
         **kwargs,
     ) -> List[QuantumProgramResult]:
         if not isinstance(program, list):
             program = [program]
 
-        computation_model = QuantumComputationModel(
+        computation_model_dict = QuantumComputationModel(
             programs=program,
             backend=None,
             client=None,
         ).to_dict()
 
-        computation_parameters = QuantumComputationParameters(
+        computation_parameters_dict = QuantumComputationParameters(
             shots=shots,
         ).to_dict()
 
-        model = self.__client.create_model(computation_model)
+        model = self.__client.create_model(computation_model_dict)
 
         if not model:
             raise RuntimeError("Failed to push model data")
 
-        job = self.__client.create_job(self.__session_id, model_id=model.id)
+        job = self.__client.create_job(
+            self.__session_id, model_id=model.id, parameters=computation_parameters_dict
+        )
 
-        if wait:
-            while job.status in ["waiting", "running"]:
-                time.sleep(2)
-                job = self.__client.get_job(job.id)
+        while job.status in ["waiting", "running"]:
+            time.sleep(2)
+            job = self.__client.get_job(job.id)
 
         if job.status == "error":
             raise RuntimeError(f"Job failed with error: {job.progress_message}")
 
-        raw_results = self.__client.list_job_results(job.id)
+        job_results = self.__client.list_job_results(job.id)
 
         program_results = list(
             map(
-                lambda r: QuantumProgramResult.from_json(
-                    self._extract_payload_from_response(r)
-                ),
-                raw_results,
+                lambda r: self._extract_payload_from_response(r),
+                job_results,
             )
         )
 
@@ -106,7 +105,9 @@ class ScalewayBackend(Backend):
 
         return program_results
 
-    def _extract_payload_from_response(self, job_result: QaaSJobResult) -> str:
+    def _extract_payload_from_response(
+        self, job_result: QaaSJobResult
+    ) -> QuantumProgramResult:
         result = job_result.result
 
         if result is None or result == "":
@@ -115,12 +116,11 @@ class ScalewayBackend(Backend):
             if url is not None:
                 resp = httpx.get(url)
                 resp.raise_for_status()
-
-                return resp.text
+                result = resp.text
             else:
                 raise RuntimeError("Got result with empty data and url fields")
-        else:
-            return result
+
+        return QuantumProgramResult.from_json(result)
 
     @property
     def max_qubit_count(self) -> int:
