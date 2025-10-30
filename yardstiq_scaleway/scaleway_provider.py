@@ -1,22 +1,27 @@
-from typing import Any, Dict, List
+import httpx
+import time
+
+from typing import List, Union
+
+from qami import (
+    QuantumProgram,
+    QuantumProgramResult,
+    QuantumComputationModel,
+    QuantumComputationParameters,
+)
 
 from yardstiq.core import (
     provider,
     Provider,
     Backend,
-    BackendRunResult,
     BackendAvailability,
-    ComputationalModel,
 )
 
 from scaleway_qaas_client.v1alpha1 import (
     QaaSClient,
     QaaSPlatform,
     QaaSPlatformAvailability,
-    QaaSJobBackendData,
-    QaaSJobRunData,
-    QaaSJobData,
-    QaaSCircuitData
+    QaaSJobResult,
 )
 
 
@@ -24,7 +29,9 @@ class ScalewayBackend(Backend):
     def __init__(
         self, provider: "ScalewayProvider", platform: QaaSPlatform, client: QaaSClient
     ):
-        super().__init__(provider=provider, name=platform.name)
+        super().__init__(
+            provider=provider, name=platform.name, version=platform.version
+        )
 
         self.__platform: QaaSPlatform = platform
         self.__client: QaaSClient = client
@@ -35,9 +42,11 @@ class ScalewayBackend(Backend):
             return
 
         deduplication_id = kwargs.get("deduplication_id", None)
+
         session = self.__client.create_session(
             self.__platform.id, deduplication_id=deduplication_id
         )
+
         self.__session_id = session.id
 
     def deallocate(self, **kwargs) -> None:
@@ -46,41 +55,72 @@ class ScalewayBackend(Backend):
 
         self.__client.terminate_session(self.__session_id)
 
-    def run(self, model: ComputationalModel, shots : int, **kwargs) -> BackendRunResult:
-        run_data = QaaSJobRunData(
-            options={
-                "shots": shots,
-            },
-            circuits=list(
-                map(
-                    lambda c: QaaSCircuitData(
-                        serialization_format=model.serialization_format,
-                        circuit_serialization=model.serialization,
-                    ),
-                    self._circuits,
-                )
-            ),
-        )
+    def run(
+        self,
+        program: Union[QuantumProgram, List[QuantumProgram]],
+        shots: int,
+        wait: bool,
+        **kwargs,
+    ) -> List[QuantumProgramResult]:
+        if not isinstance(program, list):
+            program = [program]
 
-        backend_data = QaaSJobBackendData(
-            name=self.backend().name,
-            version=self.backend().version,
-        )
+        computation_model = QuantumComputationModel(
+            programs=program,
+            backend=None,
+            client=None,
+        ).to_dict()
 
-        data = QaaSJobData.schema().dumps(
-            QaaSJobData(
-                backend=backend_data,
-                run=run_data,
-                client=None,
+        computation_parameters = QuantumComputationParameters(
+            shots=shots,
+        ).to_dict()
+
+        model = self.__client.create_model(computation_model)
+
+        if not model:
+            raise RuntimeError("Failed to push model data")
+
+        job = self.__client.create_job(self.__session_id, model_id=model.id)
+
+        if wait:
+            while job.status in ["waiting", "running"]:
+                time.sleep(2)
+                job = self.__client.get_job(job.id)
+
+        if job.status == "error":
+            raise RuntimeError(f"Job failed with error: {job.progress_message}")
+
+        raw_results = self.__client.list_job_results(job.id)
+
+        program_results = list(
+            map(
+                lambda r: QuantumProgramResult.from_json(
+                    self._extract_payload_from_response(r)
+                ),
+                raw_results,
             )
         )
 
-        model = self.__client.create_model(model)
+        if len(program_results) == 1:
+            return program_results[0]
 
-        if not model:
-            raise RuntimeError("Failed to push circuit data")
+        return program_results
 
-        job = self.__client.create_job(self.__session_id, model_id=model.id)
+    def _extract_payload_from_response(self, job_result: QaaSJobResult) -> str:
+        result = job_result.result
+
+        if result is None or result == "":
+            url = job_result.url
+
+            if url is not None:
+                resp = httpx.get(url)
+                resp.raise_for_status()
+
+                return resp.text
+            else:
+                raise RuntimeError("Got result with empty data and url fields")
+        else:
+            return result
 
     @property
     def max_qubit_count(self) -> int:
@@ -98,7 +138,7 @@ class ScalewayBackend(Backend):
             QaaSPlatformAvailability.MAINTENANCE: BackendAvailability.MAINTENANCE,
         }
         return availability_map.get(
-            self.__platform.availability, BackendAvailability.UNKOWN_AVAILABILITY
+            self.__platform.availability, BackendAvailability.UNKNOWN_AVAILABILITY
         )
 
 

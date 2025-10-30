@@ -10,7 +10,8 @@ requires-python = ">=3.12"
 
 dependencies = [
     "yardstiq>=0.1.0",
-    "scaleway-qaas-client>=0.1.23"
+    "scaleway-qaas-client>=0.1.23",
+    "qami,"
 ]
 
 [project.entry-points."yardstiq.plugins"]
