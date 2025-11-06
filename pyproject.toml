@@ -9,9 +9,9 @@ description = "Scaleway provider implementation for Yardstiq"
 requires-python = ">=3.12"
 
 dependencies = [
-    "yardstiq>=0.1.0",
+    "yardstiq>=0.1.1",
     "scaleway-qaas-client>=0.1.23",
-    "qami>=0.1.0",
+    "qio>=0.1.17",
 ]
 
 [project.urls]

@@ -65,23 +65,25 @@ class ScalewayBackend(Backend):
         if not isinstance(program, list):
             program = [program]
 
-        computation_model_dict = QuantumComputationModel(
+        computation_model_json = QuantumComputationModel(
             programs=program,
             backend=None,
             client=None,
-        ).to_dict()
+        ).to_json_str()
 
-        computation_parameters_dict = QuantumComputationParameters(
+        computation_parameters_json = QuantumComputationParameters(
             shots=shots,
-        ).to_dict()
+        ).to_json_str()
 
-        model = self.__client.create_model(computation_model_dict)
+        model = self.__client.create_model(computation_model_json)
 
         if not model:
             raise RuntimeError("Failed to push model data")
 
         job = self.__client.create_job(
-            self.__session_id, model_id=model.id, parameters=computation_parameters_dict
+            self.__session_id,
+            model_id=model.id,
+            parameters=computation_parameters_json
         )
 
         while job.status in ["waiting", "running"]:
@@ -120,7 +122,7 @@ class ScalewayBackend(Backend):
             else:
                 raise RuntimeError("Got result with empty data and url fields")
 
-        return QuantumProgramResult.from_json(result)
+        return QuantumProgramResult.from_json_str(result)
 
     @property
     def max_qubit_count(self) -> int:
